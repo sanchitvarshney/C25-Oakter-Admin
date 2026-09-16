@@ -1,0 +1,33 @@
+import { configureStore } from "@reduxjs/toolkit";
+import authReducer from "@/features/authentication/authSlice";
+import userReducer from "@/features/user/userSlice";
+import menuReducer from "@/features/menu/menuSlice";
+import isIdReducer from "@/features/menu/isIdReducer";
+import locationSlice from "@/features/location/locationSlice";
+import ProfileSlice from "@/features/profile/ProfileSlice";
+import dashboardReducer from "@/features/dashboard/dashboardSlice";
+import adminReducer from "@/features/admin/adminSlice";
+import imsDashboardReducer from "@/features/dashboard/imsDashboardSlice";
+import historyReducer from "@/features/history/historySlice";
+
+export const store = configureStore({
+  reducer: {
+    auth: authReducer,
+    user: userReducer,
+    menu: menuReducer,
+    isId: isIdReducer,
+    location: locationSlice,
+    profile: ProfileSlice,
+    dashboard: dashboardReducer,
+    admin: adminReducer,
+    imsDashboard: imsDashboardReducer,
+    history: historyReducer,
+  },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      serializableCheck: false,
+    }),
+});
+
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
