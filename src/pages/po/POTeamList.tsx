@@ -1,10 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useAppDispatch, useAppSelector } from "@/hooks/useReduxHook";
 import { AgGridReact } from "@ag-grid-community/react";
 import { ColDef } from "@ag-grid-community/core";
 import CustomLoadingOverlay from "@/components/reusable/CustomLoadingOverlay";
 import { OverlayNoRowsTemplate } from "@/components/reusable/OverlayNoRowsTeplate";
-import { Typography, IconButton, Tooltip, Button, Chip } from "@mui/material";
+import {
+  Typography,
+  IconButton,
+  Tooltip,
+  Button,
+  Chip,
+} from "@mui/material";
 import { Icons } from "@/components/icons/icons";
 import {
   fetchPOTeamMembers,
@@ -12,7 +18,6 @@ import {
   searchUsers,
   searchCostCenters,
   addPOTeamMember,
-  fetchAllCostCenters,
 } from "@/features/user/userSlice";
 import { showToast } from "@/utills/toasterContext";
 import {
@@ -23,6 +28,17 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import useDebounce from "@/hooks/useDebounce";
+
+type FlatPORow = {
+  leaderName: string;
+  leaderId: string;
+  memberName: string;
+  memberId: string;
+  costCenterName: string;
+  costCenterCode: string;
+  costCenterId: string;
+};
 
 const POTeamList: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -35,23 +51,19 @@ const POTeamList: React.FC = () => {
     costCenters,
     getCostCentersLoading,
     addPOTeamLoading,
-    getAllCostCentersLoading,
   } = useAppSelector((s) => s.user);
 
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    leader_id: "",
-    member_id: "",
-  });
-    const [costCenterSelections, setCostCenterSelections] = useState<
-    { id: string; text: string }[]
-  >([]);
+  const [formData, setFormData] = useState({ leader_id: "", member_id: "" });
+  const [costCenterSelections, setCostCenterSelections] = useState<{ id: string; text: string }[]>([]);
   const [leaderSearch, setLeaderSearch] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [costCenterSearch, setCostCenterSearch] = useState("");
   const [showLeaderList, setShowLeaderList] = useState(false);
   const [showMemberList, setShowMemberList] = useState(false);
   const [showCostCenterList, setShowCostCenterList] = useState(false);
+
+    const debouncedVendorSearch = useDebounce(costCenterSearch, 300);
   const [deleteConfirm, setDeleteConfirm] = useState({
     open: false,
     leaderId: "",
@@ -62,6 +74,112 @@ const POTeamList: React.FC = () => {
   useEffect(() => {
     dispatch(fetchPOTeamMembers());
   }, [dispatch]);
+
+  const rowData = useMemo<FlatPORow[]>(() => {
+    if (!poTeamMembers) return [];
+    const rows: FlatPORow[] = [];
+    poTeamMembers.forEach((leader:any) => {
+      leader.members?.forEach((member:any) => {
+        member.costcenters?.forEach((cc:any) => {
+          rows.push({
+            leaderName: leader.leaderName,
+            leaderId: leader.leaderId,
+            memberName: member.member_name,
+            memberId: member.member_id,
+            costCenterName: cc.cost_center_name,
+            costCenterCode: cc.cost_center_short_name,
+            costCenterId: cc.cost_center,
+          });
+        });
+      });
+    });
+    return rows;
+  }, [poTeamMembers]);
+
+  const autoGroupColumnDef = useMemo<ColDef>(
+    () => ({
+      headerName: "Leader / Member",
+      minWidth: 400,
+      cellRenderer: "agGroupCellRenderer",
+      cellRendererParams: {
+          suppressCount: true,
+        innerRenderer: (params: any) => {
+          const { node } = params;
+          if (node.level === 0) {
+         
+            return (
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col leading-tight">
+                  <span className="font-semibold text-sm">{params.value}</span>
+                </div>
+          
+              </div>
+            );
+          }
+          if (node.level === 1) {
+            return (
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col leading-tight">
+                  <span className="font-medium text-sm">{params.value}</span>
+                </div>
+              </div>
+            );
+          }
+          return null;
+        },
+      },
+    }),
+    []
+  );
+
+  const columnDefs = useMemo<ColDef[]>(
+    () => [
+      { field: "leaderName", rowGroup: true, hide: true },
+      { field: "memberName", rowGroup: true, hide: true },
+      {
+        field: "costCenterName",
+        headerName: "Cost Center",
+        flex: 1,
+        filter: true,
+      },
+      {
+        field: "costCenterCode",
+        headerName: "CC Code",
+        minWidth: 130,
+        filter: true,
+      },
+      {
+        headerName: "Actions",
+        maxWidth: 90,
+        sortable: false,
+        filter: false,
+        cellRenderer: (params: any) => {
+          if (params.node.group) return null;
+          return (
+            <div className="flex items-center h-full">
+              <Tooltip title="Delete">
+                <IconButton
+                  color="error"
+                  size="small"
+                  onClick={() =>
+                    setDeleteConfirm({
+                      open: true,
+                      leaderId: params.data.leaderId,
+                      memberId: params.data.memberId,
+                      costCenter: params.data.costCenterId,
+                    })
+                  }
+                >
+                  <Icons.delete fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </div>
+          );
+        },
+      },
+    ],
+    []
+  );
 
   const handleSearchUsers = (searchTerm: string, type: "leader" | "member") => {
     if (searchTerm.length >= 2) {
@@ -75,142 +193,64 @@ const POTeamList: React.FC = () => {
   };
 
   const handleSearchCostCenters = (searchTerm: string) => {
-    if (searchTerm.length >= 2) {
-      dispatch(searchCostCenters(searchTerm));
-    }
-    setShowCostCenterList(true);
+
+      setCostCenterSearch(searchTerm);
+ 
+
   };
 
-  const handleSelectAllCostCenters = async () => {
-    try {
-      const res = await dispatch(fetchAllCostCenters()).unwrap();
-      if (res.data.success) {
-        setCostCenterSelections(
-          (res.data.data as any[]).map((cc) => ({
-            id: cc.cc_key ?? cc.id,
-            text: cc.cc_name ?? cc.text,
-          }))
-        );
+    useEffect(() => {
+      if (debouncedVendorSearch && debouncedVendorSearch.length >= 2) {
+        dispatch(searchCostCenters(debouncedVendorSearch));
+             setShowCostCenterList(true);
+      } else {
+        setShowCostCenterList(false);
       }
-    } finally {
-      setCostCenterSearch("");
-      setShowCostCenterList(false);
-    }
-  };
+    }, [debouncedVendorSearch, dispatch]);
 
   const handleAddMember = async () => {
-    if (!formData.leader_id || !formData.member_id ||  costCenterSelections.length === 0) {
+    if (!formData.leader_id || !formData.member_id || costCenterSelections.length === 0) {
       showToast("Please fill all fields", "error");
       return;
     }
+    await dispatch(addPOTeamMember({ ...formData, cost_center: costCenterSelections.map((c) => c.id) })).then(
+      (response:any) => {
+        if (response?.payload.data.success) {
+          showToast(response?.payload.data.message?.msg ?? response?.payload.data.message, "success");
+             
+    resetAddForm();
+    dispatch(fetchPOTeamMembers());
+        }
+      }
+    ).catch((error:any) => {
+      console.log("Error adding PO Team member:", error);
+      showToast( error?.message ?? "Failed to add PO Team member", "error");
+     
+    });
 
-    await dispatch( addPOTeamMember({
-        ...formData,
-        cost_center: costCenterSelections.map((c) => c.id),
-      }));
+  };
+
+  const confirmDelete = async () => {
+    const { leaderId, memberId, costCenter } = deleteConfirm;
+    await dispatch(deletePOTeamMember({ leader_id: leaderId, member_id: memberId, cost_center: costCenter }));
+    setDeleteConfirm({ open: false, leaderId: "", memberId: "", costCenter: "" });
+    dispatch(fetchPOTeamMembers());
+  };
+
+  const cancelDelete = () =>
+    setDeleteConfirm({ open: false, leaderId: "", memberId: "", costCenter: "" });
+
+  const resetAddForm = () => {
     setAddModalOpen(false);
     setFormData({ leader_id: "", member_id: "" });
-        setCostCenterSelections([]);
+    setCostCenterSelections([]);
     setLeaderSearch("");
     setMemberSearch("");
     setCostCenterSearch("");
     setShowLeaderList(false);
     setShowMemberList(false);
     setShowCostCenterList(false);
-    dispatch(fetchPOTeamMembers());
   };
-
-  const handleDeleteMember = (
-    leaderId: string,
-    memberId: string,
-    costCenter: string,
-  ) => {
-    setDeleteConfirm({ open: true, leaderId, memberId, costCenter });
-  };
-
-  const confirmDelete = async () => {
-    const { leaderId, memberId, costCenter } = deleteConfirm;
-    await dispatch(
-      deletePOTeamMember({
-        leader_id: leaderId,
-        member_id: memberId,
-        cost_center: costCenter,
-      }),
-    ).then((res) => {
-      console.log(res);
-    });
-    setDeleteConfirm({
-      open: false,
-      leaderId: "",
-      memberId: "",
-      costCenter: "",
-    });
-    dispatch(fetchPOTeamMembers());
-  };
-
-  const cancelDelete = () =>
-    setDeleteConfirm({
-      open: false,
-      leaderId: "",
-      memberId: "",
-      costCenter: "",
-    });
-
-  const columns: ColDef[] = [
-    {
-      field: "leader_name",
-      headerName: "Leader Name",
-      minWidth: 200,
-      flex: 1,
-      filter: true,
-    },
-    {
-      field: "member_name",
-      headerName: "Member Name",
-      minWidth: 200,
-      flex: 1,
-      filter: true,
-    },
-    {
-      field: "cost_center_name",
-      headerName: "Cost Center",
-      minWidth: 200,
-      flex: 1,
-      filter: true,
-    },
-    {
-      field: "cost_center_short_name",
-      headerName: "Cost Center Code",
-      minWidth: 150,
-      filter: true,
-    },
-    {
-      headerName: "Actions",
-      field: "action",
-      maxWidth: 100,
-      cellRenderer: (params: any) => (
-        <div className="flex items-center gap-2">
-          <Tooltip title="Delete">
-            <IconButton
-              color="error"
-              size="small"
-              onClick={() =>
-                handleDeleteMember(
-                  params.data.leader_id,
-                  params.data.member_id,
-                  params.data.cost_center,
-                )
-              }
-            >
-              <Icons.delete fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </div>
-      ),
-      sortable: false,
-      filter: false,
-    },
-  ];
 
   return (
     <div className="overflow-y-auto h-[calc(100vh-72px)]">
@@ -219,11 +259,7 @@ const POTeamList: React.FC = () => {
           <Typography variant="h2" fontWeight={500} fontSize={20}>
             PO Team List
           </Typography>
-          <Button
-            variant="contained"
-            onClick={() => setAddModalOpen(true)}
-            className="bg-green-600 hover:bg-green-700"
-          >
+          <Button variant="contained" onClick={() => setAddModalOpen(true)}>
             <Icons.add className="mr-2" />
             Add Member
           </Button>
@@ -231,31 +267,31 @@ const POTeamList: React.FC = () => {
 
         <div className="ag-theme-quartz h-[calc(100vh-140px)]">
           <AgGridReact
-            columnDefs={columns}
-            rowData={poTeamMembers || []}
+            columnDefs={columnDefs}
+            rowData={rowData}
+            autoGroupColumnDef={autoGroupColumnDef}
+            groupDefaultExpanded={0}
+       
             loadingOverlayComponent={CustomLoadingOverlay}
-            loadingOverlayComponentParams={{
-              loadingMessage: "Loading PO team members...",
-            }}
+            loadingOverlayComponentParams={{ loadingMessage: "Loading PO team..." }}
             noRowsOverlayComponent={OverlayNoRowsTemplate}
-            noRowsOverlayComponentParams={{
-              message: "No PO team members found",
-            }}
+            noRowsOverlayComponentParams={{ message: "No PO team members found" }}
             loading={getPOTeamLoading}
-            pagination={true}
+            pagination
             paginationPageSize={20}
             domLayout="normal"
-            suppressRowClickSelection={true}
-            tooltipShowDelay={0}
-            tooltipHideDelay={2000}
+            suppressRowClickSelection
             enableCellTextSelection
           />
         </div>
       </div>
 
       {/* Add Member Modal */}
-      <Dialog open={addModalOpen} onOpenChange={() => setAddModalOpen(false)}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={addModalOpen} onOpenChange={resetAddForm}>
+        <DialogContent
+          className="max-w-2xl"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Add PO Team Member</DialogTitle>
           </DialogHeader>
@@ -277,26 +313,23 @@ const POTeamList: React.FC = () => {
                     <Icons.refresh className="animate-spin h-4 w-4" />
                   </div>
                 )}
-                {showLeaderList &&
-                  users &&
-                  users.length > 0 &&
-                  leaderSearch && (
-                    <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                      {users.map((user) => (
-                        <div
-                          key={user.id}
-                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => {
-                            setFormData({ ...formData, leader_id: user.id });
-                            setLeaderSearch(user.text);
-                            setShowLeaderList(false);
-                          }}
-                        >
-                          {user.text}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {showLeaderList && users && users.length > 0 && leaderSearch && (
+                  <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {users.map((user) => (
+                      <div
+                        key={user.id}
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setFormData({ ...formData, leader_id: user.id });
+                          setLeaderSearch(user.text);
+                          setShowLeaderList(false);
+                        }}
+                      >
+                        {user.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -317,32 +350,29 @@ const POTeamList: React.FC = () => {
                     <Icons.refresh className="animate-spin h-4 w-4" />
                   </div>
                 )}
-                {showMemberList &&
-                  users &&
-                  users.length > 0 &&
-                  memberSearch && (
-                    <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                      {users.map((user) => (
-                        <div
-                          key={user.id}
-                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => {
-                            setFormData({ ...formData, member_id: user.id });
-                            setMemberSearch(user.text);
-                            setShowMemberList(false);
-                          }}
-                        >
-                          {user.text}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {showMemberList && users && users.length > 0 && memberSearch && (
+                  <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    {users.map((user) => (
+                      <div
+                        key={user.id}
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setFormData({ ...formData, member_id: user.id });
+                          setMemberSearch(user.text);
+                          setShowMemberList(false);
+                        }}
+                      >
+                        {user.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="costCenter">SELECT COST CENTER</Label>
-                 {costCenterSelections.length > 0 && (
+              {costCenterSelections.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {costCenterSelections.map((cc) => (
                     <Chip
@@ -350,9 +380,7 @@ const POTeamList: React.FC = () => {
                       label={cc.text}
                       size="small"
                       onDelete={() =>
-                        setCostCenterSelections((prev) =>
-                          prev.filter((c) => c.id !== cc.id)
-                        )
+                        setCostCenterSelections((prev) => prev.filter((c) => c.id !== cc.id))
                       }
                     />
                   ))}
@@ -361,80 +389,48 @@ const POTeamList: React.FC = () => {
               <div className="relative">
                 <Input
                   id="costCenter"
-                 placeholder="Search and add cost centers"
+                  placeholder="Search and add cost centers"
                   value={costCenterSearch}
-                  onFocus={() => setShowCostCenterList(true)}
                   onChange={(e) => {
-                    setCostCenterSearch(e.target.value);
+                   
                     handleSearchCostCenters(e.target.value);
                   }}
                 />
-                {(getCostCentersLoading || getAllCostCentersLoading) && (
+                {getCostCentersLoading && (
                   <div className="absolute right-2 top-2">
                     <Icons.refresh className="animate-spin h-4 w-4" />
                   </div>
                 )}
-                {showCostCenterList && (
+                {showCostCenterList && costCenters && costCenters.length > 0 && costCenterSearch && (
                   <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                    <div
-                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer font-medium text-blue-600 border-b"
-                      onClick={handleSelectAllCostCenters}
-                    >
-                      All Cost Centers
-                    </div>
-                    {costCenters &&
-                      costCenters.length > 0 &&
-                      costCenterSearch &&
-                      costCenters.map((costCenter) => (
-                        <div
-                          key={costCenter.id}
-                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                         onClick={() => {
-                            setCostCenterSelections((prev) => {
-                              if (prev.some((c) => c.id === costCenter.id)) {
-                                return prev;
-                              }
-                              return [
-                                ...prev,
-                                { id: costCenter.id, text: costCenter.text },
-                              ];
-                            });
-                            setCostCenterSearch("");
-                            setShowCostCenterList(false);
-                          }}
-                        >
-                          {costCenter.text}
-                        </div>
-                      ))}
+                    {costCenters.map((costCenter) => (
+                      <div
+                        key={costCenter.id}
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                        onClick={() => {
+                          setCostCenterSelections((prev) => {
+                            if (prev.some((c) => c.id === costCenter.id)) return prev;
+                            return [...prev, { id: costCenter.id, text: costCenter.text }];
+                          });
+                          setCostCenterSearch("");
+                          setShowCostCenterList(false);
+                        }}
+                      >
+                        {costCenter.text}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-4">
-              <Button
-                onClick={() => {
-                  setAddModalOpen(false);
-                  setFormData({
-                    leader_id: "",
-                    member_id: "",
-                  
-                  });
-                       setCostCenterSelections([]);
-                  setLeaderSearch("");
-                  setMemberSearch("");
-                  setCostCenterSearch("");
-                  setShowLeaderList(false);
-                  setShowMemberList(false);
-                  setShowCostCenterList(false);
-                }}
-              >
-                RESET
-              </Button>
+              <Button onClick={resetAddForm} variant="outlined" color="error">RESET</Button>
               <Button
                 onClick={handleAddMember}
                 disabled={addPOTeamLoading}
-                className=" hover:bg-green-400 text-white"
+                className=" text-white"
+                variant="contained"
               >
                 {addPOTeamLoading ? (
                   <span className="flex items-center">
@@ -455,14 +451,15 @@ const POTeamList: React.FC = () => {
 
       {/* Delete Confirmation */}
       <Dialog open={deleteConfirm.open} onOpenChange={cancelDelete}>
-        <DialogContent className="max-w-md">
+        <DialogContent
+          className="max-w-md"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Delete Team Member</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p>
-              Are you sure you want to remove this team member from PO team?
-            </p>
+            <p>Are you sure you want to remove this cost center from the team member?</p>
             <div className="flex justify-end gap-2">
               <Button variant="outlined" onClick={cancelDelete}>
                 Cancel
