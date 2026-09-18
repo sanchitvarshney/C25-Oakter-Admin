@@ -71,6 +71,8 @@ const initialState: AdduserSatates = {
   getUsersLoading: false,
   costCenters: null,
   getCostCentersLoading: false,
+  allCostCenters: null,
+  getAllCostCentersLoading: false,
   // New: company/server status toggle loadings
   updateCompanyStatusLoading: false,
   updateCompanyServerStatusLoading: false,
@@ -399,6 +401,14 @@ export const searchCostCenters = createAsyncThunk<
   const formData = new FormData();
   formData.append("search", searchQuery);
   const response = await axiosInstance.post("/backend/costCenter", formData);
+  return response;
+});
+
+export const fetchAllCostCenters = createAsyncThunk<
+  AxiosResponse<CostCenterApiResponse>,
+  void
+>("user/fetchAllCostCenters", async () => {
+  const response = await axiosInstance.get("/admin/po_mail/fetch_all_cc");
   return response;
 });
 
@@ -888,6 +898,21 @@ const userSlice = createSlice({
       .addCase(searchCostCenters.rejected, (state) => {
         state.getCostCentersLoading = false;
         state.costCenters = [];
+      })
+      .addCase(fetchAllCostCenters.pending, (state) => {
+        state.getAllCostCentersLoading = true;
+      })
+      .addCase(fetchAllCostCenters.fulfilled, (state, action) => {
+        state.getAllCostCentersLoading = false;
+        if (action.payload.data.success) {
+          state.allCostCenters = action.payload.data.data;
+        } else {
+          state.allCostCenters = [];
+        }
+      })
+      .addCase(fetchAllCostCenters.rejected, (state) => {
+        state.getAllCostCentersLoading = false;
+        state.allCostCenters = [];
       })
       .addCase(updateCompanyServerStatus.pending, (state) => {
         state.updateCompanyServerStatusLoading = true;

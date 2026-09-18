@@ -12,6 +12,7 @@ import {
   searchUsers,
   searchCostCenters,
   addPOTeamMember,
+  fetchAllCostCenters,
 } from "@/features/user/userSlice";
 import { showToast } from "@/utills/toasterContext";
 import {
@@ -34,6 +35,8 @@ const POTeamList: React.FC = () => {
     costCenters,
     getCostCentersLoading,
     addPOTeamLoading,
+    allCostCenters,
+    getAllCostCentersLoading,
   } = useAppSelector((s) => s.user);
 
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -75,8 +78,18 @@ const POTeamList: React.FC = () => {
   const handleSearchCostCenters = (searchTerm: string) => {
     if (searchTerm.length >= 2) {
       dispatch(searchCostCenters(searchTerm));
-      setShowCostCenterList(true);
-    } else {
+    }
+    setShowCostCenterList(true);
+  };
+
+  const handleSelectAllCostCenters = async () => {
+    try {
+      const res = await dispatch(fetchAllCostCenters()).unwrap();
+      if (res.data.success) {
+        setCostCenterSelections(res.data.data);
+      }
+    } finally {
+      setCostCenterSearch("");
       setShowCostCenterList(false);
     }
   };
@@ -346,22 +359,29 @@ const POTeamList: React.FC = () => {
                   id="costCenter"
                  placeholder="Search and add cost centers"
                   value={costCenterSearch}
+                  onFocus={() => setShowCostCenterList(true)}
                   onChange={(e) => {
                     setCostCenterSearch(e.target.value);
                     handleSearchCostCenters(e.target.value);
                   }}
                 />
-                {getCostCentersLoading && (
+                {(getCostCentersLoading || getAllCostCentersLoading) && (
                   <div className="absolute right-2 top-2">
                     <Icons.refresh className="animate-spin h-4 w-4" />
                   </div>
                 )}
-                {showCostCenterList &&
-                  costCenters &&
-                  costCenters.length > 0 &&
-                  costCenterSearch && (
-                    <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                      {costCenters.map((costCenter) => (
+                {showCostCenterList && (
+                  <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
+                    <div
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer font-medium text-blue-600 border-b"
+                      onClick={handleSelectAllCostCenters}
+                    >
+                      All Cost Centers
+                    </div>
+                    {costCenters &&
+                      costCenters.length > 0 &&
+                      costCenterSearch &&
+                      costCenters.map((costCenter) => (
                         <div
                           key={costCenter.id}
                           className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
@@ -382,8 +402,8 @@ const POTeamList: React.FC = () => {
                           {costCenter.text}
                         </div>
                       ))}
-                    </div>
-                  )}
+                  </div>
+                )}
               </div>
             </div>
 

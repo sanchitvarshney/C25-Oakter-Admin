@@ -272,6 +272,8 @@ export type AdduserSatates = {
   getUsersLoading: boolean;
   costCenters: CostCenterOption[] | null;
   getCostCentersLoading: boolean;
+  allCostCenters: CostCenterOption[] | null;
+  getAllCostCentersLoading: boolean;
   // New: company/server status toggle loadings
   updateCompanyStatusLoading: boolean;
   updateCompanyServerStatusLoading: boolean;
