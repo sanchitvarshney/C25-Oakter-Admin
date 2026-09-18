@@ -35,7 +35,6 @@ const POTeamList: React.FC = () => {
     costCenters,
     getCostCentersLoading,
     addPOTeamLoading,
-    allCostCenters,
     getAllCostCentersLoading,
   } = useAppSelector((s) => s.user);
 
