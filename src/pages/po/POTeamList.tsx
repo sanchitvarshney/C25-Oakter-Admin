@@ -85,7 +85,12 @@ const POTeamList: React.FC = () => {
     try {
       const res = await dispatch(fetchAllCostCenters()).unwrap();
       if (res.data.success) {
-        setCostCenterSelections(res.data.data);
+        setCostCenterSelections(
+          (res.data.data as any[]).map((cc) => ({
+            id: cc.cc_key ?? cc.id,
+            text: cc.cc_name ?? cc.text,
+          }))
+        );
       }
     } finally {
       setCostCenterSearch("");
