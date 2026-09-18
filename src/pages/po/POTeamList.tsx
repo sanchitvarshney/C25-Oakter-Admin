@@ -18,6 +18,7 @@ import {
   searchUsers,
   searchCostCenters,
   addPOTeamMember,
+  fetchAllCostCenters,
 } from "@/features/user/userSlice";
 import { showToast } from "@/utills/toasterContext";
 import {
@@ -51,6 +52,7 @@ const POTeamList: React.FC = () => {
     costCenters,
     getCostCentersLoading,
     addPOTeamLoading,
+    getAllCostCentersLoading,
   } = useAppSelector((s) => s.user);
 
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -195,15 +197,32 @@ const POTeamList: React.FC = () => {
   const handleSearchCostCenters = (searchTerm: string) => {
 
       setCostCenterSearch(searchTerm);
- 
 
+
+  };
+
+  const handleSelectAllCostCenters = async () => {
+    try {
+      const res = await dispatch(fetchAllCostCenters()).unwrap();
+      if (res.data.success) {
+        setCostCenterSelections(
+          (res.data.data as any[]).map((cc) => ({
+            id: cc.cc_key ?? cc.id,
+            text: cc.cc_name ?? cc.text,
+          }))
+        );
+      }
+    } finally {
+      setCostCenterSearch("");
+      setShowCostCenterList(false);
+    }
   };
 
     useEffect(() => {
       if (debouncedVendorSearch && debouncedVendorSearch.length >= 2) {
         dispatch(searchCostCenters(debouncedVendorSearch));
              setShowCostCenterList(true);
-      } else {
+      } else if (debouncedVendorSearch.length > 0) {
         setShowCostCenterList(false);
       }
     }, [debouncedVendorSearch, dispatch]);
@@ -391,34 +410,44 @@ const POTeamList: React.FC = () => {
                   id="costCenter"
                   placeholder="Search and add cost centers"
                   value={costCenterSearch}
+                  onFocus={() => setShowCostCenterList(true)}
                   onChange={(e) => {
-                   
+
                     handleSearchCostCenters(e.target.value);
                   }}
                 />
-                {getCostCentersLoading && (
+                {(getCostCentersLoading || getAllCostCentersLoading) && (
                   <div className="absolute right-2 top-2">
                     <Icons.refresh className="animate-spin h-4 w-4" />
                   </div>
                 )}
-                {showCostCenterList && costCenters && costCenters.length > 0 && costCenterSearch && (
+                {showCostCenterList && (
                   <div className="absolute z-10 w-full bg-white border rounded-md shadow-lg max-h-40 overflow-y-auto">
-                    {costCenters.map((costCenter) => (
-                      <div
-                        key={costCenter.id}
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => {
-                          setCostCenterSelections((prev) => {
-                            if (prev.some((c) => c.id === costCenter.id)) return prev;
-                            return [...prev, { id: costCenter.id, text: costCenter.text }];
-                          });
-                          setCostCenterSearch("");
-                          setShowCostCenterList(false);
-                        }}
-                      >
-                        {costCenter.text}
-                      </div>
-                    ))}
+                    <div
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer font-medium text-blue-600 border-b"
+                      onClick={handleSelectAllCostCenters}
+                    >
+                      All Cost Centers
+                    </div>
+                    {costCenters &&
+                      costCenters.length > 0 &&
+                      costCenterSearch &&
+                      costCenters.map((costCenter) => (
+                        <div
+                          key={costCenter.id}
+                          className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                          onClick={() => {
+                            setCostCenterSelections((prev) => {
+                              if (prev.some((c) => c.id === costCenter.id)) return prev;
+                              return [...prev, { id: costCenter.id, text: costCenter.text }];
+                            });
+                            setCostCenterSearch("");
+                            setShowCostCenterList(false);
+                          }}
+                        >
+                          {costCenter.text}
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>
